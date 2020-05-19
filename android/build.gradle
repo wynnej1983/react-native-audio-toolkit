@@ -36,4 +36,5 @@ repositories {
 
 dependencies {
     implementation "com.facebook.react:react-native:+"  // From node_modules
+    compile 'com.github.wseemann:FFmpegMediaPlayer:1.0.4'
 }

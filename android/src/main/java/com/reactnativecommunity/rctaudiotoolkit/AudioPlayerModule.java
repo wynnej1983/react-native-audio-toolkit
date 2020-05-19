@@ -2,7 +2,8 @@ package com.reactnativecommunity.rctaudiotoolkit;
 
 import android.content.Context;
 import android.media.AudioManager;
-import android.media.MediaPlayer;
+// import android.media.MediaPlayer;
+import wseemann.media.FFmpegMediaPlayer;
 import android.media.PlaybackParams;
 import android.media.AudioAttributes;
 import android.media.AudioAttributes.Builder;
@@ -32,12 +33,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 
-public class AudioPlayerModule extends ReactContextBaseJavaModule implements MediaPlayer.OnInfoListener,
-        MediaPlayer.OnErrorListener, MediaPlayer.OnCompletionListener, MediaPlayer.OnSeekCompleteListener,
-        MediaPlayer.OnBufferingUpdateListener, LifecycleEventListener, AudioManager.OnAudioFocusChangeListener {
+public class AudioPlayerModule extends ReactContextBaseJavaModule implements FFmpegMediaPlayer.OnInfoListener,
+        FFmpegMediaPlayer.OnErrorListener, FFmpegMediaPlayer.OnCompletionListener, FFmpegMediaPlayer.OnSeekCompleteListener,
+        FFmpegMediaPlayer.OnBufferingUpdateListener, LifecycleEventListener, AudioManager.OnAudioFocusChangeListener {
     private static final String LOG_TAG = "AudioPlayerModule";
 
-    Map<Integer, MediaPlayer> playerPool = new HashMap<>();
+    Map<Integer, FFmpegMediaPlayer> playerPool = new HashMap<>();
     Map<Integer, Boolean> playerAutoDestroy = new HashMap<>();
     Map<Integer, Boolean> playerContinueInBackground = new HashMap<>();
     Map<Integer, Callback> playerSeekCallback = new HashMap<>();
@@ -64,13 +65,13 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
     public void onHostPause() {
         // Need to create a copy here because it is possible for other code to modify playerPool
         // at the same time which will lead to a ConcurrentModificationException being thrown
-        Map<Integer, MediaPlayer> playerPoolCopy = new HashMap<>(this.playerPool);
+        Map<Integer, FFmpegMediaPlayer> playerPoolCopy = new HashMap<>(this.playerPool);
 
-        for (Map.Entry<Integer, MediaPlayer> entry : playerPoolCopy.entrySet()) {
+        for (Map.Entry<Integer, FFmpegMediaPlayer> entry : playerPoolCopy.entrySet()) {
             Integer playerId = entry.getKey();
 
             if (!this.playerContinueInBackground.get(playerId)) {
-                MediaPlayer player = entry.getValue();
+                FFmpegMediaPlayer player = entry.getValue();
                 if (player == null) {
                     continue;
                 }
@@ -185,7 +186,7 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
 
     @ReactMethod
     public void destroy(Integer playerId, Callback callback) {
-        MediaPlayer player = this.playerPool.get(playerId);
+        FFmpegMediaPlayer player = this.playerPool.get(playerId);
 
         if (player != null) {
             player.release();
@@ -211,7 +212,7 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
 
     @ReactMethod
     public void seek(Integer playerId, Integer position, Callback callback) {
-        MediaPlayer player = this.playerPool.get(playerId);
+        FFmpegMediaPlayer player = this.playerPool.get(playerId);
         if (player == null) {
             callback.invoke(errObj("notfound", "playerId " + playerId + " not found."));
             return;
@@ -230,7 +231,7 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
         }
     }
 
-    private WritableMap getInfo(MediaPlayer player) {
+    private WritableMap getInfo(FFmpegMediaPlayer player) {
         WritableMap info = Arguments.createMap();
 
         info.putDouble("duration", player.getDuration());
@@ -253,8 +254,8 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
 
         Uri uri = uriFromPath(path);
 
-        //MediaPlayer player = MediaPlayer.create(this.context, uri, null, attributes);
-        MediaPlayer player = new MediaPlayer();
+        //FFmpegMediaPlayer player = FFmpegMediaPlayer.create(this.context, uri, null, attributes);
+        FFmpegMediaPlayer player = new FFmpegMediaPlayer();
 
         /*
         AudioAttributes attributes = new AudioAttributes.Builder()
@@ -277,10 +278,10 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
         player.setOnInfoListener(this);
         player.setOnCompletionListener(this);
         player.setOnSeekCompleteListener(this);
-        player.setOnPreparedListener(new MediaPlayer.OnPreparedListener() { // Async preparing, so we need to run the callback after preparing has finished
+        player.setOnPreparedListener(new FFmpegMediaPlayer.OnPreparedListener() { // Async preparing, so we need to run the callback after preparing has finished
 
             @Override
-            public void onPrepared(MediaPlayer player) {
+            public void onPrepared(FFmpegMediaPlayer player) {
                 callback.invoke(null, getInfo(player));
             }
 
@@ -321,7 +322,7 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
 
     @ReactMethod
     public void set(Integer playerId, ReadableMap options, Callback callback) {
-        MediaPlayer player = this.playerPool.get(playerId);
+        FFmpegMediaPlayer player = this.playerPool.get(playerId);
         if (player == null) {
             callback.invoke(errObj("notfound", "playerId " + playerId + " not found."));
             return;
@@ -352,38 +353,38 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
         }
 
         // `PlaybackParams` was only added in API 23
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && (options.hasKey("speed") || options.hasKey("pitch"))) {
-            PlaybackParams params = new PlaybackParams();
-
-            boolean needToPauseAfterSet = false;
-            if (options.hasKey("speed") && !options.isNull("speed")) {
-                // If the player wasn't already playing, then setting the speed value to a non-zero value
-                // will start it playing and we don't want that so we need to make sure to pause it straight
-                // after setting the speed value
-                boolean wasAlreadyPlaying = player.isPlaying();
-                float speedValue = (float) options.getDouble("speed");
-                needToPauseAfterSet = !wasAlreadyPlaying && speedValue != 0.0f;
-
-                params.setSpeed(speedValue);
-            }
-
-            if (options.hasKey("pitch") && !options.isNull("pitch")) {
-                params.setPitch((float) options.getDouble("pitch"));
-            }
-
-            player.setPlaybackParams(params);
-
-            if (needToPauseAfterSet) {
-                player.pause();
-            }
-        }
+        // if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && (options.hasKey("speed") || options.hasKey("pitch"))) {
+        //     PlaybackParams params = new PlaybackParams();
+        // 
+        //     boolean needToPauseAfterSet = false;
+        //     if (options.hasKey("speed") && !options.isNull("speed")) {
+        //         // If the player wasn't already playing, then setting the speed value to a non-zero value
+        //         // will start it playing and we don't want that so we need to make sure to pause it straight
+        //         // after setting the speed value
+        //         boolean wasAlreadyPlaying = player.isPlaying();
+        //         float speedValue = (float) options.getDouble("speed");
+        //         needToPauseAfterSet = !wasAlreadyPlaying && speedValue != 0.0f;
+        // 
+        //         params.setSpeed(speedValue);
+        //     }
+        // 
+        //     if (options.hasKey("pitch") && !options.isNull("pitch")) {
+        //         params.setPitch((float) options.getDouble("pitch"));
+        //     }
+        // 
+        //     player.setPlaybackParams(params);
+        // 
+        //     if (needToPauseAfterSet) {
+        //         player.pause();
+        //     }
+        // }
 
         callback.invoke();
     }
 
     @ReactMethod
     public void play(Integer playerId, Callback callback) {
-        MediaPlayer player = this.playerPool.get(playerId);
+        FFmpegMediaPlayer player = this.playerPool.get(playerId);
         if (player == null) {
             callback.invoke(errObj("notfound", "playerId " + playerId + " not found."));
             return;
@@ -403,7 +404,7 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
 
     @ReactMethod
     public void pause(Integer playerId, Callback callback) {
-        MediaPlayer player = this.playerPool.get(playerId);
+        FFmpegMediaPlayer player = this.playerPool.get(playerId);
         if (player == null) {
             callback.invoke(errObj("notfound", "playerId " + playerId + " not found."));
             return;
@@ -430,7 +431,7 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
 
     @ReactMethod
     public void stop(Integer playerId, Callback callback) {
-        MediaPlayer player = this.playerPool.get(playerId);
+        FFmpegMediaPlayer player = this.playerPool.get(playerId);
         if (player == null) {
             callback.invoke(errObj("notfound", "playerId " + playerId + " not found."));
             return;
@@ -464,7 +465,7 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
 
     @ReactMethod
     public void getCurrentTime(Integer playerId, Callback callback) {
-        MediaPlayer player = this.playerPool.get(playerId);
+        FFmpegMediaPlayer player = this.playerPool.get(playerId);
         if (player == null) {
             callback.invoke(errObj("notfound", "playerId " + playerId + " not found."));
             return;
@@ -478,8 +479,8 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
     }
 
     // Find playerId matching player from playerPool
-    private Integer getPlayerId(MediaPlayer player) {
-        for (Entry<Integer, MediaPlayer> entry : playerPool.entrySet()) {
+    private Integer getPlayerId(FFmpegMediaPlayer player) {
+        for (Entry<Integer, FFmpegMediaPlayer> entry : playerPool.entrySet()) {
             if (equals(player, entry.getValue())) {
                 return entry.getKey();
             }
@@ -489,7 +490,7 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
     }
 
     @Override
-    public void onBufferingUpdate(MediaPlayer player, int percent) {
+    public void onBufferingUpdate(FFmpegMediaPlayer player, int percent) {
         Integer playerId = getPlayerId(player);
 
         WritableMap data = new WritableNativeMap();
@@ -499,7 +500,7 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
     }
 
     @Override
-    public void onSeekComplete(MediaPlayer player) {
+    public void onSeekComplete(FFmpegMediaPlayer player) {
         Integer playerId = getPlayerId(player);
 
         // Invoke seek callback
@@ -516,7 +517,7 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
     }
 
     @Override
-    public void onCompletion(MediaPlayer player) {
+    public void onCompletion(FFmpegMediaPlayer player) {
         Integer playerId = getPlayerId(player);
 
         WritableMap data = new WritableNativeMap();
@@ -538,7 +539,7 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
     }
 
     @Override
-    public boolean onError(MediaPlayer player, int what, int extra) {
+    public boolean onError(FFmpegMediaPlayer player, int what, int extra) {
         Integer playerId = getPlayerId(player);
 
         // TODO: translate these codes into english
@@ -548,7 +549,7 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
 
         WritableMap data = new WritableNativeMap();
         data.putMap("err", err);
-        data.putString("message", "Android MediaPlayer error");
+        data.putString("message", "Android FFmpegMediaPlayer error");
 
         emitEvent(playerId, "error", data);
 
@@ -557,7 +558,7 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
     }
 
     @Override
-    public boolean onInfo(MediaPlayer player, int what, int extra) {
+    public boolean onInfo(FFmpegMediaPlayer player, int what, int extra) {
         Integer playerId = getPlayerId(player);
 
         // TODO: translate these codes into english
@@ -567,7 +568,7 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
 
         WritableMap data = new WritableNativeMap();
         data.putMap("info", info);
-        data.putString("message", "Android MediaPlayer info");
+        data.putString("message", "Android FFmpegMediaPlayer info");
 
         emitEvent(playerId, "info", data);
 
@@ -581,7 +582,7 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule implements Med
         {
             case AudioManager.AUDIOFOCUS_LOSS:
             case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
-                //MediaPlayer player = this.playerPool.get(this.lastPlayerId);
+                //FFmpegMediaPlayer player = this.playerPool.get(this.lastPlayerId);
                 WritableMap data = new WritableNativeMap();
                 data.putString("message", "Lost audio focus, playback paused");
 
